@@ -1,0 +1,465 @@
+---
+title: "QVT_Prof_Santé_Sud_Cameroun"
+author: "Nansseu JR"
+date: "2025-07-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,
+                      message = FALSE,
+                      warning = FALSE)
+```
+
+# Présentation
+
+Cette analyse présente les résultats issus de l'enquête sur la qualité de vie au travail (QVT) des personnels de santé de neuf formations sanitaires du Sud Cameroun.
+
+# Importation des packages et base de donnnées
+
+```{r}
+# Importing the packages
+if(!require(pacman)) install.packages("pacman")
+pacman::p_load(tidyverse,
+               gtsummary,
+               Rtools,
+               knitr,
+               here,
+               janitor,
+               readxl,
+               ggplot,
+               plotly,
+               cowplot)
+
+# Importing the dataset
+qvt <- read_xlsx(
+  path = here("data/Base Excel QLV Modifié.xlsx"),
+  sheet = "Feuil1",
+  range = "A1:AV210",
+  col_names = TRUE) %>% 
+  clean_names()
+```
+
+La base de données contient 209 observations et 48 variables. Les résultats sont donc présentés pour 209 participants.
+
+# 1. Analyses univariées
+
+```{r}
+# Nettoyage et trannsformation des variables
+
+## Facility name, profession_cat_other & current service
+qvt <- qvt %>% 
+  mutate(facility_name = str_to_title(facility_name),
+         profession_cat_other = str_to_title(profession_cat_other),
+         current_service = str_to_title(current_service))
+
+## Merging infirmier et sage-femme
+qvt <- 
+  qvt %>% 
+  mutate(prof_cat = case_when(
+    profession_cat == "Sage-femme / Maïeuticien(ne)" ~ "Infirmier(e)",
+    profession_cat == "Personnel Médical (Médecin, Pharmacien CD)" ~ "Personnel Médical",
+    TRUE ~ profession_cat
+  ))
+
+```
+
+Le tableau ci-dessous présente les différentes frésuences absolues et pourcentages de chaque modalité des variables renseignées.
+
+```{r}
+qvt %>%
+  tbl_summary()
+```
+
+## 1.2 Quelques graphiques
+### a- Tranches d'âges par sexe
+
+```{r}
+# Tranches d'âge par sexe
+ fig1 <- 
+  qvt %>% 
+  count(age_group, gender) %>% 
+  arrange(desc(n)) %>% 
+  ggplot(mapping = aes(x = reorder(age_group, n),
+                       y = n,
+                       fill = gender)) +
+  geom_col(linewidth = 0.5,
+           color = "white",
+           position = "stack") +
+  geom_text(mapping = aes(label = n),
+            position = position_stack(vjust = 0.5),
+            color = "white",
+            fontface = "bold",
+            size = 4) +
+  labs(x = "Tranches d'âge",
+       y = "Nombre de participants",
+       fill = "Sexe",
+       title = "Répartition des participants par tranches d'âge et sexe") +
+  theme(legend.position = "bottom")
+fig1
+```
+
+```{r}
+ggsave(plot = fig1,
+       filename = here("outputs/Figure1.jpg"),
+       width = 8,
+       height = 6)
+```
+
+La tranche d'âge la plus représentée est celle des 35-44 ans (n = 83; 40%). le sexe ratio est de 0.38H/1F.
+
+### b- Catégorie professionnelle par type de formation sanitaire (FOSA)
+
+```{r}
+fig2 <- 
+  qvt %>% 
+  count(prof_cat, facility_type) %>% 
+  arrange(desc(n)) %>% 
+  ggplot(mapping = aes(y = reorder(prof_cat, n),
+                       x = n,
+                       fill = facility_type)) +
+  geom_col(linewidth = 0.5,
+           color = "white",
+           position = "stack") +
+  geom_text(mapping = aes(label = n),
+            position = position_stack(vjust = 0.5),
+            color = "black",
+            fontface = "bold",
+            size = 4) +
+  labs(y = "Catégorie professionnelle",
+       x = "Nombre de participants",
+       fill = "Type de formation sanitaire",
+       title = "Répartition des participants par catégorie professionnelle et type de FOSA") + 
+  theme(legend.position = "bottom",
+        legend.title.position = "top")
+fig2
+```
+
+```{r}
+ggsave(plot = fig2,
+       filename = here("outputs/Figure2.jpg"),
+       width = 12,
+       height = 6)
+```
+
+### c-Catégorie professionnelle par FOSA enquêtée
+
+```{r}
+ fig3 <- 
+  ggplot(data = qvt,
+       mapping = aes(y = prof_cat)) +
+  geom_bar(fill = "forestgreen") +
+  geom_text(stat = "count",
+            mapping = aes(label = ..count..),
+            color = "black",
+            hjust = -0.5) +
+  facet_wrap(vars(facility_name)) +
+  labs(x = "Nombre de participants",
+       y = "Catégorie professionnelle",
+       title = "Répartition des participants par catégorie professionnelle dans chaque FOSA enquêtée")
+fig3
+```
+
+```{r}
+ggsave(plot = fig3,
+       filename = here("outputs/Figure3.jpg"),
+       width = 20,
+       height = 9)
+```
+
+### d- Rôle à l'hôpital par FOSA enquêtée
+
+```{r}
+fig4 <- 
+  ggplot(data = qvt,
+       mapping = aes(y = hospital_role)) +
+  geom_bar(fill = "orange") +
+  geom_text(stat = "count",
+            mapping = aes(label = ..count..),
+            color = "black",
+            hjust = -0.5) +
+  facet_wrap(vars(facility_name)) +
+  labs(x = "Nombre de participants",
+       y = "Rôle hospitalier",
+       title = "Répartition des participants par rôle dans chaque FOSA enquêtée")
+fig4
+```
+
+```{r}
+ggsave(plot = fig4,
+       filename = here("outputs/Figure4.jpg"),
+       width = 20,
+       height = 8)
+```
+
+## 1.3 Détermination de la qualité de vie au travail
+
+```{r}
+# Calcul de la QVT globale et des six facteurs
+qvt <- 
+  qvt %>% 
+  mutate(qdv_globale = q1+q2+q3+q4+q5+q6+q7+q8+q9+q10+q11+q12+q13+q14+q15+q16+q17+q18+q19+q20+q21+q22+q23,
+         gwb = q4+q9+q10+q15+q17+q21,
+         hwi = q5+q6+q14,
+         jcs = q1+q3+q8+q11+q18+q20,
+         caw = q2+q12+q23,
+         saw = q7+q19,
+         wcs = q13+q16+q22)
+```
+
+```{r}
+# Test de normalité sur qdv globale
+shapiro.test(qvt$qdv_globale)
+## W = 0.99348, p-value = 0.4905; p>0.05 signifie que la distribution est ghaussienne; ainsi on peut utiliser la moyenne et écart-type pour résumer cette variable
+```
+
+```{r}
+shapiro.test(qvt$gwb) #W = 0.98062, p-value = 0.005601
+shapiro.test(qvt$hwi) #W = 0.97698, p-value = 0.001678
+shapiro.test(qvt$jcs) #W = 0.98256, p-value = 0.0109; distribution normale
+shapiro.test(qvt$caw) #W = 0.97968, p-value = 0.004075
+shapiro.test(qvt$saw) #W = 0.95539, p-value = 4.113e-06
+shapiro.test(qvt$wcs) #W = 0.97085, p-value = 0.0002525
+```
+
+L'analyse de la normalité montre que seuls la qdv globale et le facteur 4 (JCS) ont une distribution normale, pour lesquels des tests paramétriques peuvent être utilisés.
+
+```{r}
+summary(qvt$qdv_globale)
+# std(qvt$qdv_globale)
+```
+
+La qualité de vie globale varie de 41 à 106 avec une médiane de 70, une moyenne de 71,9 et un écart-type de ...
+
+```{r}
+summary(qvt$gwb)
+summary(qvt$hwi)
+summary(qvt$caw)
+summary(qvt$jcs)
+summary(qvt$saw)
+summary(qvt$wcs)
+```
+
+#### Graphique présentant la distribution de la qualité de vie globale et de ses six facteurs
+
+```{r}
+qdv <- 
+  ggplot(data = qvt,
+       mapping = aes(x = qdv_globale)) +
+  geom_boxplot(color = "seagreen",
+               linewidth = 0.75)+
+  labs(x = "QVT globale",
+       title = "Distribution de la QVT et ses six facteurs")
+
+gwb <- 
+  ggplot(data = qvt,
+       mapping = aes(x = gwb)) +
+  geom_boxplot(color = "seagreen",
+               linewidth = 0.75)+
+  labs(x = "GWB")
+
+hwi <- 
+  ggplot(data = qvt,
+       mapping = aes(x = hwi)) +
+  geom_boxplot(color = "seagreen",
+               linewidth = 0.75)+
+  labs(x = "HWI")
+
+caw <- 
+  ggplot(data = qvt,
+       mapping = aes(x = caw)) +
+  geom_boxplot(color = "seagreen",
+               linewidth = 0.75)+
+  labs(x = "GWB")
+
+jcs <- 
+  ggplot(data = qvt,
+       mapping = aes(x = jcs)) +
+  geom_boxplot(color = "seagreen",
+               linewidth = 0.75)+
+  labs(x = "JCS")
+
+saw <- 
+  ggplot(data = qvt,
+       mapping = aes(x = saw)) +
+  geom_boxplot(color = "seagreen",
+               linewidth = 0.75)+
+  labs(x = "SAW")
+
+wcs <- 
+  ggplot(data = qvt,
+       mapping = aes(x = wcs)) +
+  geom_boxplot(color = "seagreen",
+               linewidth = 0.75)+
+  labs(x = "WCS")
+
+fig5 <- plot_grid(qdv, gwb, hwi, caw, jcs, saw, wcs, nrow = 7,
+                  labels = "AUTO") 
+fig5
+
+```
+
+```{r}
+ggsave(filename = here("outputs/Figure5.jpg"),
+       plot = fig5,
+       width = 10,
+       height = 8)
+```
+
+# Analyses bi-variées
+## QVT vs âge et sexe
+
+```{r}
+fig6a <- 
+  ggplot(data = qvt,
+         mapping = aes(y = gender,
+                       x = qdv_globale)) +
+  geom_boxplot(color = "seagreen",
+               linewidth = 0.75) +
+  geom_jitter(color = "black",
+              width = 0.2,
+              size = 1,
+              alpha = 0.3) +
+  labs(y = "Sexe",
+       x = "Qualité de vie au travail",
+       title = "Qualité de vie au travail par sexe (A) et tranche d'âge (B)")
+
+fig6b <- 
+  ggplot(data = qvt,
+         mapping = aes(y = reorder(age_group, qdv_globale),
+                       x = qdv_globale)) +
+  geom_boxplot(color = "seagreen",
+               linewidth = 0.75) +
+  geom_jitter(color = "black",
+              width = 0.2,
+              size = 1,
+              alpha = 0.3) +
+  labs(y = "Tranche d'âge",
+       x = "Qualité de vie au travail")
+
+fig6 <- plot_grid(fig6a, fig6b, nrow = 2,
+                  labels = "AUTO") 
+fig6
+
+ggsave(filename = here("outputs/Figure6.jpg"),
+       plot = fig6,
+       width = 8,
+       height = 6)
+
+```
+
+```{r}
+# Test de comparaison qdv vs sexe
+t.test(qdv_globale ~ gender, data = qvt)
+wilcox.test(qdv_globale ~ gender, data = qvt)
+```
+
+Comme le montre la figure 5, la qdv globale est signficativement plus élevée chez les hommes que chez les femmes (moyenne 75,3 vs 70,6; p = 0.027).
+
+```{r}
+# Comparaison qdv vs âge
+kruskal.test(qdv_globale ~ age_group, data = qvt)
+```
+
+Par contre, bien que la qdv semble plus élevée chez les moins de 25 ans, il n'y a pas de différence significative entre les tranches d'âge (p = 0,143).
+
+## QVT vs Catégorie professionnelle & Type de FOSA 
+
+```{r}
+fig7a <- 
+  ggplot(data = qvt,
+         mapping = aes(y = prof_cat,
+                       x = qdv_globale)) +
+  geom_boxplot(color = "seagreen",
+               linewidth = 0.75) +
+  geom_jitter(color = "black",
+              width = 0.2,
+              size = 1,
+              alpha = 0.3) +
+  labs(y = "Catégorie professionnelle",
+       x = "Qualité de vie au travail",
+       title = "Qualité de vie au travail par Cat prof (A) et type de FOSA (B)")
+
+fig7b <- 
+  ggplot(data = qvt,
+         mapping = aes(y = reorder(facility_type, qdv_globale),
+                       x = qdv_globale)) +
+  geom_boxplot(color = "seagreen",
+               linewidth = 0.75) +
+  geom_jitter(color = "black",
+              width = 0.2,
+              size = 1,
+              alpha = 0.3) +
+  labs(y = "Type de FOSA",
+       x = "Qualité de vie au travail")
+
+fig7 <- plot_grid(fig7a, fig7b, nrow = 2,
+                  labels = "AUTO") 
+fig7
+
+```
+
+```{r}
+ggsave(filename = here("outputs/Figure7.jpg"),
+       plot = fig7,
+       width = 8,
+       height = 6)
+```
+
+```{r}
+# Comparaison qdv vs cat prof
+kruskal.test(qdv_globale ~ prof_cat, data = qvt)
+
+# Comparaison qdv vs type de fosa
+kruskal.test(qdv_globale ~ facility_type, data = qvt)
+```
+
+Le personnel médical a une qualité de vie significativement plus élevée que celle des autres catégories professionnelles (p = 0,02). Cependant, le type de FOSA ne semble pas influer sur la QDV (p=0,242).
+
+## QDV et ancienneté, revenu mensuel
+
+```{r}
+  ggplot(data = qvt,
+         mapping = aes(y = seniority,
+                       x = qdv_globale)) +
+  geom_boxplot(color = "seagreen",
+               linewidth = 0.75) +
+  geom_jitter(color = "black",
+              width = 0.2,
+              size = 1,
+              alpha = 0.3) +
+  labs(y = "Ancienneté au poste",
+       x = "Qualité de vie au travail",
+       title = "Qualité de vie au travail par ancienneté au poste")
+
+ ggplot(data = qvt,
+         mapping = aes(y = salary_level,
+                       x = qdv_globale)) +
+  geom_boxplot(color = "seagreen",
+               linewidth = 0.75) +
+  geom_jitter(color = "black",
+              width = 0.2,
+              size = 1,
+              alpha = 0.3) +
+  labs(y = "Revenu mensuel moyen",
+       x = "Qualité de vie au travail")
+ 
+ ggplot(data = qvt,
+         mapping = aes(y = salary_frequency,
+                       x = qdv_globale)) +
+  geom_boxplot(color = "seagreen",
+               linewidth = 0.75) +
+  geom_jitter(color = "black",
+              width = 0.2,
+              size = 1,
+              alpha = 0.3) +
+  labs(y = "Fréquence de paiement",
+       x = "Qualité de vie au travail")
+```
+
+
+
+
+
+
+
